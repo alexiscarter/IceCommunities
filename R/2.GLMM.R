@@ -1,5 +1,5 @@
 ## GLMM
-## In this script there is the code for the generalized linear mixed-effect modelsfor the biodiversity and soil features
+## In this script there is the code for the generalized linear mixed-effect models for the biodiversity and soil features
 
 ## Load packages and data ####
 library(phyloseq)
