@@ -16,7 +16,7 @@ library(MASS)
 library(EcoGenetics)
 options(max.print = 10000)
 
-all_data=read.delim("div.clim.chem.csv", sep=";")
+all_data=read.delim("data/div.clim.chem.csv", sep=";")
 
 ## remove rows with NA
 full_nona=all_data[!is.na(all_data$lg_n),]
@@ -34,7 +34,6 @@ full_nona$time2=full_nona$time.s^2
 full_nona$lg_c=log(full_nona$c)
 full_nona$year_g=paste(full_nona$Glacier, full_nona$Year, sep="_")
 
-
 ### free variables to allow external correlations
 n.s=full_nona$n.s
 ph.s=full_nona$ph.s
@@ -43,7 +42,6 @@ ndvi.s=full_nona$ndvi.s
 p.s=full_nona$p.s
 twi.s=full_nona$twi.s
 time2=I(full_nona$twi.s^2)
-
 
 ### LOG TRANSFORM BIODIVERSITY DATA TO IMPROVE NORMALITY
 full_nona$fung.q1.l=log(full_nona$fung.q1)
@@ -71,8 +69,7 @@ year_g=paste(full_nona$Year, "_", full_nona$Glacier, sep="")
 ###  STRUCTURE: plants co-vary with fungi and bacteria
 ## in preliminary trials, we tried quadratic effects of time but  never significant so removed
 
-### MODEL 1: THE ENVIRONMENTAL FEATURES DIRECTLY AFFECT BIODIVERSITY
-
+### MODEL 1: THE ENVIRONMENTAL FEATURES DIRECTLY AFFECT BIODIVERSITY?
 psem_all_direct = psem(
   lmer_euka.uni=  lmer(euka.uni.q1.l~ph.s+ph2+time.s+twi.s+t.s+ndvi.s+sper.q1.l+n.s+p.s+(1|year_g)+(1|Glacier), data=full_nona),
   lmer_euka.multi=lmer(euka.ani.q1.l~ph.s+ph2+time.s+twi.s+t.s+ndvi.s+sper.q1.l+n.s+p.s+(1|year_g)+(1|Glacier), data=full_nona),
@@ -135,8 +132,7 @@ summary(psem_all_direct, standardize = "scale")
 # ndvi.s   none     0.31        0.92
 # sper.q1.l   none     0.10        0.47
 
-### ALTERNATIVE APPROACH: BIODIVERSITY determines ecosystem attributes???
-
+### ALTERNATIVE APPROACH: BIODIVERSITY determines ecosystem attributes?
 psem_multifunct = psem(
   lmer_euka.uni=lmer(euka.uni.q1.l~ph.s+ph2+time.s+twi.s+t.s+sper.q1.l+(1|year_g)+(1|Glacier), data=full_nona),
   lmer_euka.multi=lmer(euka.ani.q1.l~ph.s+ph2+time.s+twi.s+t.s+sper.q1.l+(1|year_g)+(1|Glacier), data=full_nona),
@@ -203,7 +199,7 @@ summary(psem_multifunct, standardize = "scale")
 BIC(psem_multifunct)
 # 881.083
 
-### THIRD MODEL: ECOSYSTEM ATTRIBUTES COVARY  WITH BIODIVERSITY???
+### THIRD MODEL: ECOSYSTEM ATTRIBUTES COVARY  WITH BIODIVERSITY?
 ### NOTE: I  TRIED TO ADD TIME^2, particularly given its effect on pH, but it increases the BIC of the model so then excluded.
 ### non-significant quadratic relationships (eg with pH) not included in the model
 
@@ -320,8 +316,6 @@ summary(psem_covary)
 
 ## check spatial autocorrelation of residuals using Moran's I
 
-
-
 res=residuals(psem_covary$lmer_euka.uni)
 (moran=eco.correlog(Z=res, XY=full_nona[,33:34], alternative="greater",seqvec=c(0,100,500,1000,10000,50000,100000,200000,400000,1000000),method="I", latlon=T, nsim=300))
 
@@ -349,7 +343,6 @@ res=residuals(psem_covary$lmer_euka.multi)
 # d=2e+05-4e+05 243392.167 -0.0007     1 16996
 # d=4e+05-1e+06 647560.848  0.0000     1  7540
 
-
 res=residuals(psem_covary$lmer_sper)
 (moran=eco.correlog(Z=res, XY=full_nona[,33:34],alternative="greater", seqvec=c(0,100,500,1000,10000,50000,100000,200000,400000,1000000),method="I", latlon=T, nsim=300))
 # d.mean     obs p.val  size
@@ -362,8 +355,6 @@ res=residuals(psem_covary$lmer_sper)
 # d=1e+05-2e+05 149708.716  0.0007     1 23754
 # d=2e+05-4e+05 243392.167  0.0013     1 16996
 # d=4e+05-1e+06 647560.848  0.0035     1  7540
-
-
 
 res=residuals(psem_covary$lmer_coll)
 (moran=eco.correlog(Z=res, XY=full_nona[,33:34],alternative="greater", seqvec=c(0,100,500,1000,10000,50000,100000,200000,400000,1000000),method="I", latlon=T, nsim=300))
@@ -431,10 +422,7 @@ hist(res)
 # d=2e+05-4e+05 243392.167  0.0011     1 16996
 # d=4e+05-1e+06 647560.848  0.0019     1  7540
 
-
-
 ### starting from PSEM COVARY: test the models: without biotic interactions; without effect of micro-habitat, without effect of time.
-
 psem_co_noh = psem(
   lmer_euka.uni=  lmer(euka.uni.q1.l~ph.s+ph2+time.s+twi.s+t.s+sper.q1.l+(1|year_g)+(1|Glacier), data=full_nona, REML=F),
   lmer_euka.multi=lmer(euka.ani.q1.l~ph.s+ph2+time.s+twi.s+t.s+sper.q1.l+(1|year_g)+(1|Glacier), data=full_nona, REML=F),
@@ -570,7 +558,6 @@ summary(psem_co_nobio)
 # n.s   none     0.26        0.73
 # p.s   none     0.13        0.71
 # ndvi.s   none     0.30        0.92
-
 
 psem_co_notime = psem(
   lmer_euka.uni=  lmer(euka.uni.q1.l~ph.s+ph2+twi.s+t.s+sper.q1.l+(1|year_g)+(1|Glacier), data=full_nona, REML=F),

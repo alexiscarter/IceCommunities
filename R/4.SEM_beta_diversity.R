@@ -71,17 +71,7 @@
 	# GD 1.0  2.0  3.0  4.0  1.0  2.0  3.0  1.0  2.0  1.0		# sort of threshold effect - non-dependence on GB
 	# BD 0.2  0.4  1.0  1.0  0.2  1.0  1.0  1.0  1.0  NA
 
-
-
-
-
-
-#@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-#@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-#@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-
-setwd("C:\\Lyrgus\\D O C\\pubbli\\icecom\\community changes\\script")
-
+## Load packages and data
 library(piecewiseSEM)
 library(lme4)
 library(lmerTest)
@@ -91,12 +81,10 @@ library(MuMIn)
 library(parallel)
 library(raster)
 
-beta.tot=read.csv("beta.biotic.plot.csv",header=T,stringsAsFactors=F)
-div=read.delim("full_nona.txt", header=T,stringsAsFactors=F)
+beta.tot=read.csv("data/beta.biotic.plot.csv",header=T,stringsAsFactors=F)
+div=read.delim("data/full_nona.txt", header=T,stringsAsFactors=F)
 
 div$all.ani.q0=div$coll.q0+div$olig.q0+div$inse.q0+div$euka.ani.q0
-
-
 
 ####################
 ## data selection ## - select the markers of interest and filter the table
@@ -105,9 +93,7 @@ div$all.ani.q0=div$coll.q0+div$olig.q0+div$inse.q0+div$euka.ani.q0
 nrow(beta.tot)					# 18,429 comparisons
 length(unique(beta.tot$glacier1))		# 46 glaciers
 
-
 ## remove glaciers / samples with incomplete soil data
-
 tokeep=unique(c(beta.tot$Plot1[which(beta.tot$Plot1 %in% div$uniqPlot==T)],
 		beta.tot$Plot2[which(beta.tot$Plot2 %in% div$uniqPlot==T)]))
 
@@ -120,9 +106,7 @@ length(unique(beta.tot$glacier1))		# 32 glaciers
 all(beta.tot$Plot1 %in% div$uniqPlot==T)		# ok
 all(beta.tot$Plot2 %in% div$uniqPlot==T)
 
-
 ## remove samples with 0 species
-
 zero_plus=apply(div[,which(names(div) %in% c("sper.q0","bact.q0","fung.q0","all.ani.q0"))],		# eventually add ,"euka.uni.q0"
 		MARGIN=1,FUN=function(x){all(x>0)})
 
@@ -136,16 +120,12 @@ beta.tot=beta.tot[which(beta.tot$Plot1 %in% tokeep & beta.tot$Plot2 %in% tokeep)
 
 nrow(beta.tot)			# 5,741 - or 3,958 including euka.uni.q0
 
-
 # check for square matrices (within each glacier)
-
 comp=tapply(beta.tot$glacier1,INDEX=beta.tot$glacier1,FUN=function(x){length(x)})
 samp=tapply(c(beta.tot$Plot1,beta.tot$Plot2),INDEX=rep(beta.tot$glacier,2),FUN=function(x){length(unique(x))})
 
 comp2=unlist(lapply(samp,FUN=function(x){max(cumsum(1:(x-1)))}))	# this equals (samp^2-samp)/2 or unlist(lapply(samp,FUN=function(x){ncol(combn(1:x,2))}))
 all(comp==comp2)							# ok
-
-
 
 ##################
 ## beta abiotic ##
@@ -155,7 +135,6 @@ all(comp==comp2)							# ok
 
 # Note: log-transform time, ndvi, n, p and twi before calculating distances / differences
 	# in the simpler case, this involves we are working with log(ratios) (log(time1)-log(time2) = log(time1/time2))
-
 
 beta.tot$time_diff=NA
 beta.tot$beta.geo=NA
@@ -188,14 +167,9 @@ for(i in 1:nrow(beta.tot)){
 	
 }
 
-
 summary(beta.tot)			# NAs remaining in beta.coll, beta.euka.uni, beta.euka.animals, beta.inse, beta.olig (not to be used)
 
-
-
-
- ### LOG-TRANSFORM VARIABLES (for all of them, the log transformation is the one allowing to best approach normality)
-
+### LOG-TRANSFORM VARIABLES (for all of them, the log transformation is the one allowing to best approach normality)
 beta.tot$beta.microclim.lg=log(beta.tot$beta.microclim+0.01)
 beta.tot$beta.np.lg=log(beta.tot$beta.np)
 beta.tot$ph_diff.lg=log(beta.tot$ph_diff+0.01)
@@ -204,12 +178,7 @@ beta.tot$beta.geo.lg=log(beta.tot$beta.geo)
 beta.tot$ndvi.diff.lg=log(beta.tot$ndvi_diff+0.01)
 beta.tot$time_diff.lg=log(beta.tot$time_diff+0.5)
 
-
-
-
-
 ## the PSEM MODEL ASSUMING CO-VARIATION BETWEEN BIOTIC VARIABLES AND SOIL
-
 psem=psem(
   lmer_microclim=lmer(beta.microclim.lg ~ beta.geo.lg + (1|glacier1), data=beta.tot, na.action = na.omit),
   
@@ -278,7 +247,6 @@ for(i in 1:length(resp)){
 	obs[nrow(s$coefficients)+sel.r]=s$R2$Conditional[sel.r]					# Rsquared - to be treated as a typical Mantel (use as-is)
 
 }
-
 
 
 #############
@@ -528,7 +496,6 @@ summary(psem_nobio)
 BIC(psem_nobio)
 # 2637.763
 
-
 ###############
 ## THE MODEL WITHOUT THE EFFECTS OF HABITAT ON BIODIVERSITY
 ###############
@@ -746,15 +713,9 @@ psem_biodiv_affects_soil=psem(
 BIC(psem)
 # 458.736
 
-str(psem)
-
 BIC(psem_biodiv_affects_soil)
 # 517.087
 
-
-
 BIC(psem_soil_affects_bio)
 # 519.323
-
-
 
