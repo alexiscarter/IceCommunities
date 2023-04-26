@@ -352,7 +352,7 @@ div.table <- data.frame(Glacier = sper.div$Glacier, Year = sper.div$Year, Plot =
                         sper.q0 = sper.div$Observed, bact.q0 = bact.div$Observed, coll.q0 = coll.div$Observed, olig.q0 = olig.div$Observed, inse.q0 = inse.div$Observed, euka.uni.q0 = euka.uni.div$Observed, euka.ani.q0 = euka.ani.div$Observed, fung.q0 = fung.div$Observed)
 
 ## Time since retreat ####
-samples <- read.csv(file = "data/IC_sampled_points_may2021.csv", sep = ",")
+samples <- read.csv(file = "data/IC_sampled_points.csv", sep = ",")
 
 ## Remove unknown date
 samples <- samples %>% filter(!is.na(date)) %>% filter(date != "") %>% filter(date != " ") %>% 
@@ -389,14 +389,14 @@ samples.sel <- samples %>%
   drop_na()
 
 ## Environment ####
-chem <- read.table('data/data_compete.txt', sep = '', header = T) 
+chem <- read.table('data/data_chemistry.txt', sep = '', header = T) 
 
 chem.clean <- chem %>% 
   mutate(uniqPlot = substr(code, start = 1, stop = 12)) %>% 
   select(-lon, -lat, -code, -Glacier, -Year, -Plot, -time_retreat)
 
 ## Climate
-clim <- read.csv("data/16.environmental variables+twi+slope+tpi_new.csv")
+clim <- read.csv("data/16.environmental.csv")
 
 ## Keep only the relevant glaciers and columns
 clim.clean <- clim %>% 

@@ -17,9 +17,7 @@ library(EcoGenetics)
 options(max.print = 10000)
 
 all_data=read.delim("data/div.clim.chem.csv", sep=";")
-
-## remove rows with NA
-full_nona=all_data[!is.na(all_data$lg_n),]
+full_nona=all_data[!is.na(all_data$lg_n),] # remove rows with NA
 
 ## transform and scale_variables
 full_nona$ph.s=scale(full_nona$ph)

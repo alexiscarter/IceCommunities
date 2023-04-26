@@ -82,7 +82,8 @@ library(parallel)
 library(raster)
 
 beta.tot=read.csv("data/beta.biotic.plot.csv",header=T,stringsAsFactors=F)
-div=read.delim("data/full_nona.txt", header=T,stringsAsFactors=F)
+all_data=read.delim("data/div.clim.chem.csv", sep=";")
+div=all_data[!is.na(all_data$lg_n),] # remove rows with NA
 
 div$all.ani.q0=div$coll.q0+div$olig.q0+div$inse.q0+div$euka.ani.q0
 

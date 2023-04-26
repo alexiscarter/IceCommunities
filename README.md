@@ -15,8 +15,7 @@ Files available in the `data` folder:
 - The filtered sequence data from all the markers in compressed format
 - The phyloseq objects for all the markers
 - `div.clim.chem.csv` Table containing biodiversity values, plot information, time since glacier retreat, soil chemistry, temperature, productivity, wetness and plot coordinates. 
-- `full_nona.txt` Biodiversity values only
-- `IC_sampled_points_may2021.csv` Raw field data
+- `IC_sampled_points.csv` Raw field data
 - `labels.csv` Sample names
 - `beta.biotic.plot.csv` Data transformed for beta diversity analyses
 

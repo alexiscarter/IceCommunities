@@ -7,7 +7,8 @@ library(tidyverse)
 library(gdm)
 
 beta.tot=read.csv("data/beta.biotic.plot.csv",header=T,stringsAsFactors=F)
-div=read.table("data/full_nona.txt", sep="\t",header=T,stringsAsFactors=F)
+all_data=read.delim("data/div.clim.chem.csv", sep=";")
+div=all_data[!is.na(all_data$lg_n),] # remove rows with NA
 
 ## Format table
 env <- env %>% 
