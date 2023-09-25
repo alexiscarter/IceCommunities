@@ -79,7 +79,9 @@ r2_bayes(sper.rich.nb)
 par(mfrow=c(2,4))
 
 # Bacteria
-cres = spline.correlog(x = div.table$lat, y = div.table$lon, resamp = 100, z = resid(bact.q1.logn))
+cres = spline.correlog(x = div.table$lat, y = div.table$lon, # This specifies the x and y coordinates of the plots 
+                       resamp = 100, # This parameter specifies the number of resampling points or distances at which the correlogram will be calculated.
+                       z = resid(bact.q1.logn)) # This specifies the variable for which the residuals are calculated. It computes the residuals of the GLMM model bact.q1.logn. Residuals are the differences between the observed values and the predicted values from the model.
 plot(cres, ylim = c(-1,1), main = "Bacteria") # No significant spatial autocorrelation is observed using spatial correlograms.
 
 # Fungi
