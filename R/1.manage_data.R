@@ -4,6 +4,7 @@
 library(phyloseq)   # Manipulation of metabarcoding data  
 library(tidyverse)  # Plotting and data manipulation 
 library(stringi)
+library(ranacapa)
 
 ## Load data
 ## Sequence
@@ -54,6 +55,7 @@ fung.phy.relax = phyloseq(otu_table(fung.motu.relax[,-c(1:3)],
                           tax_table(fung.tax),
                           sample_data(fung.motu.relax[,1:3]))
 fung.phy.relax <- prune_taxa(taxa_sums(fung.phy.relax) > 0, fung.phy.relax) 
+fung <- fung.phy.relax
 
 ## Plants
 ## Select taxonomy table
@@ -90,6 +92,7 @@ sper.phy.relax = phyloseq(otu_table(sper.motu.relax[,-c(1:3)],
                           tax_table(sper.tax),
                           sample_data(sper.motu.relax[,1:3]))
 sper.phy.relax <- prune_taxa(taxa_sums(sper.phy.relax) > 0, sper.phy.relax) 
+sper <- sper.phy.relax
 
 ## Bacteria
 ## Select taxonomy table
@@ -126,6 +129,7 @@ bact.phy.relax = phyloseq(otu_table(bact.motu.relax[,-c(1:3)],
                           tax_table(bact.tax),
                           sample_data(bact.motu.relax[,1:3]))
 bact.phy.relax <- prune_taxa(taxa_sums(bact.phy.relax) > 0, bact.phy.relax) 
+bact <- bact.phy.relax
 
 ## Fungi
 ## Select taxonomy table
@@ -162,6 +166,7 @@ coll.phy.relax = phyloseq(otu_table(coll.motu.relax[,-c(1:3)],
                           tax_table(coll.tax),
                           sample_data(coll.motu.relax[,1:3]))
 coll.phy.relax <- prune_taxa(taxa_sums(coll.phy.relax) > 0, coll.phy.relax) 
+coll <- coll.phy.relax
 
 ## Insects
 ## Select taxonomy table
@@ -198,6 +203,7 @@ inse.phy.relax = phyloseq(otu_table(inse.motu.relax[,-c(1:3)],
                           tax_table(inse.tax),
                           sample_data(inse.motu.relax[,1:3]))
 inse.phy.relax <- prune_taxa(taxa_sums(inse.phy.relax) > 0, inse.phy.relax) 
+inse <- inse.phy.relax
 
 ## Oligochetes
 ## Select taxonomy table
@@ -234,6 +240,7 @@ olig.phy.relax = phyloseq(otu_table(olig.motu.relax[,-c(1:3)],
                           tax_table(olig.tax),
                           sample_data(olig.motu.relax[,1:3]))
 olig.phy.relax <- prune_taxa(taxa_sums(olig.phy.relax) > 0, olig.phy.relax) 
+olig <- olig.phy.relax
 
 ## Eukaryotes
 ## Select taxonomy table
@@ -270,6 +277,7 @@ euka.phy.relax = phyloseq(otu_table(euka.motu.relax[,-c(1:3)],
                           tax_table(euka.tax),
                           sample_data(euka.motu.relax[,1:3]))
 euka.phy.relax <- prune_taxa(taxa_sums(euka.phy.relax) > 0, euka.phy.relax) 
+euka <- euka.phy.relax
 
 ## Diversity ####
 ## bact
