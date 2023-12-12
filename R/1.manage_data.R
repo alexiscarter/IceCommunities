@@ -434,3 +434,5 @@ div.clim.chem$glacier[div.clim.chem$glacier == "Glacier d'Estellette"] <- "Estel
 div.clim.chem$glacier[div.clim.chem$glacier == "Glacier de Nantillons"] <- "Nantillons"
 div.clim.chem$glacier[div.clim.chem$glacier == "Glacier des Pélerins"] <- "Pélerins"
 
+## Create variable for random factors
+div.clim.chem$site <- paste(div.clim.chem$Glacier, div.clim.chem$Year, sep = "_")
