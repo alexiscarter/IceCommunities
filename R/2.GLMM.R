@@ -17,7 +17,9 @@ library(ncf)
 div.table <- read.csv("data/div.clim.chem.csv", sep = ",") # from manage.clean.R
 div.table$time.log.sc <- scale(log(div.table$time)) # time since glacier retreat is log-transformed and  scaled (mean = 0, SD = 1) to improve normality and facilitate convergence
 
+##
 ## GLMMs for biodiversity development over time ####
+##
 # We provide a detailed explanation of model structure for the model using the diversity of bacteria as a dependent variable but the same structure was used for the other taxa and for the soil abiotic variables
 
 ## Bact02
@@ -29,8 +31,8 @@ bact.q1.logn <- brm(formula = bact.q1 ~ # It specifies the formula for the model
                     family=lognormal(), # This sets the family of the response variable to log-normal. It means that you are assuming the distribution of bact.q1 is log-normal, which is often used for positively skewed continuous data.
                     data = div.table, # It specifies the data frame from which the variables in the formula are taken. 
                     # Bayesian and brms parameters
-                    warmup = 500, # This determines the number of warm-up iterations, which are used for tuning the sampler, a warm-up of 5000 iterations is preferred here, 500 for preliminary runs
-                    iter = 5000, # This sets the total number of iterations for the Markov Chain Monte Carlo (MCMC) sampling, 50000 iterations here, 5000 for preliminary runs
+                    warmup = 500, # This determines the number of warm-up iterations, which are used for tuning the sampler, a warm-up of 5000 iterations is preferred here, 500 for preliminary tests or checks
+                    iter = 5000, # This sets the total number of iterations for the Markov Chain Monte Carlo (MCMC) sampling, 50000 iterations is preferred here, 5000 for preliminary tests or checks
                     chains = 4, # This specifies the number of parallel chains to run. In this case, you are running 4 chains in parallel, which is a common practice to assess convergence and improve efficiency.
                     thin = 10, # Thinning is a technique used to reduce the autocorrelation between samples in MCMC. It keeps every 10th iteration's sample.
                     refresh = 0) # The refresh interval determines how often progress updates are printed to the console. Setting it to 0 means that no updates will be printed during sampling.
@@ -80,8 +82,9 @@ r2_bayes(inse.q1.logn)
 r2_bayes(olig.q1.logn)
 r2_bayes(sper.q1.logn)
 
+##
 ## Plotting ####
-
+##
 # Plotting biodiversity over time
 # Example for bacteria
 # Marginal values
@@ -146,7 +149,9 @@ plot(cres, ylim = c(-1,1), main = "Earthworms", xlab = "Distance between plots (
 cres = spline.correlog(x = div.table$lon, y = div.table$lat, resamp = 100, z = resid(euka.ani.q1.logn), latlon = T)
 plot(cres, ylim = c(-1,1), main = "Other animals", xlab = "Distance between plots (km)") # No significant spatial autocorrelation is observed using spatial correlograms.
 
-## GLMMs for soil data ####
+##
+## GLMMs for abiotic soil data ####
+##
 # Create a new dataset by removing rows with missing values and scaling the phosphorus
 chem.table <- div.table %>% 
   drop_na() %>% 
@@ -241,8 +246,10 @@ plot(cres, ylim = c(-1,1), main = "C:N ratio", xlab = "Distance between plots (k
 cres = spline.correlog(x = div.table$lon, y = div.table$lat, resamp = 100, z = resid(cp.logn), latlon = T)
 plot(cres, ylim = c(-1,1), main = "C:P ratio", xlab = "Distance between plots (km)") # No significant spatial autocorrelation is observed using spatial correlograms.
 
+##
 ## Priors ####
-## Priors for biotic factors
+##
+# For biotic factors
 prior.bact <- c(set_prior("normal(1,2)", class = "b", coef = "time.log.sc")) # overall increase figure 4 of Pothula and Adams (2022)
 prior.coll <- c(set_prior("normal(1,2)", class = "b", coef = "time.log.sc")) # increase figure 7 of Pothula and Adams (2022)
 prior.euka.uni <- c(set_prior("normal(0,2)", class = "b", coef = "time.log.sc"))# no clear prior knowledge

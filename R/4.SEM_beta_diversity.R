@@ -1,77 +1,7 @@
 ## SEM beta diversity
 ## In this script there is the code for the structural equation modeling for the beta diversity
 
-## Rationale ##
-# We aim at comparing distance matrices, so the assumption of independence between samples is violated -> Mantel / Partial Mantel / MRM
-
-# Given the complex structure of the model (see below), we'll have several responses and several R2 (marginal and conditional) - one for each response
-
-# We're going to permute, one at a time, all the responses, by keeping fixed the remaining model structure, 
-#	and inspecting the p-values under the null hypothesis of no effect of the predictors on the given response
-
-# We're going to generate p-values for:
-	# coefficients: pseudo-t test (b/sqrt(1-r2c))
-	# covariances: Mantel
-	# R2c:Mantel
-
-# The typical permutation scheme for both Mantel and MRM is the row and column shuffling, 
-	
-	# this reallocates the observations between samples (name shuffling), while keeping fixed the distance structures
-	# e.g., if sampleA has d=c(3,5,9), after shuffling will see those values associated to another sample, but the values move as a whole through the matrix
-
-# In turn this involves that some combinations of distances (those never observed) are never generated during permutation
-	# i.e., completely random sampling of the matrix values usually leads to low and low Pvalues
-
-# Estimated distances using Sorensen for all the combination of samples - but "0motus vs 0motus" produced NA
-	
-	# This generated asymmetric and incomplete matrices (i.e., not-square and with lots of NAs) 
-	# This involves we cannot generate row-and-columnns permutations
-		# with a symmetrix matrix all samples have the same number of pairwise comparisons
-		# with an asymmetric matrix (e.g., inter-species only comparisons) all samples from the same species have the same number of pairwise comparisons
-
-	# Simply transforming asymmetric and incomplete matrices to vector and removing NAs equals performing a random sample, that usually boosts P-values (see above)
-
-# Two approaches to solve the problem:
-
-	# Remove from the pairwise comparisons samples with 0 motus and produce square matrices - but saying it with Alexis "absences may be biologically meaningful"
-	# Remove NAs after permutation (so we need a complete / square matrix - with NAs when needed - to run the analysis)
-	
-
-# Still, permutations may answer to slightly different questions
-
-	# In the first case, we are simply looking for the lack of associations between distance matrices (null hypothesis)
-	# in the second case, we look for both:
-	
-		# the lack of association
-		# the lack of effect on co-absence (that may be biologically due to the value of the variable(s), rather than to their distance)
-	
-# Additionally: *when combining several responses and removing NAs, may generate datasets with varying number of rows, unless we shuffle all the bio part together*
-
-
-## Example
-
-	# 5 sites with different species composition (BD) and at different distances along an equally-spaced transect (GD)
-		
-		# two sites (4 and 5) with zero species (e.g., recently deglaciated / close to glacier front)
-		
-
-	# GD			BD
-	#     [1] [2] [3] [4]	    [1] [2] [3] [4]
-	# [2] 1.0		[2] 0.2
-	# [3] 2.0 1.0		[3] 0.4 0.2
-	# [4] 3.0 2.0 1.0	[4] 1.0 1.0 1.0
-	# [5] 4.0 3.0 2.0 1.0	[5] 1.0 1.0 1.0  NA
-	
-
-# First approach
-	# GD 1.0  2.0  1.0
-	# BD 0.2  0.4  0.2
-	
-# Second approach
-	# GD 1.0  2.0  3.0  4.0  1.0  2.0  3.0  1.0  2.0  1.0		# sort of threshold effect - non-dependence on GB
-	# BD 0.2  0.4  1.0  1.0  0.2  1.0  1.0  1.0  1.0  NA
-
-## Load packages and data
+## Packages
 library(piecewiseSEM)
 library(lme4)
 library(lmerTest)
@@ -80,12 +10,30 @@ library(MASS)
 library(MuMIn)
 library(parallel)
 library(raster)
+library(lavaan)
+library(survey)
+library(lavaan.survey)
+library(ggplot2)
+library(gridExtra)
 
-beta.tot=read.csv("data/beta.biotic.plot.csv",header=T,stringsAsFactors=F)
-all_data=read.delim("data/div.clim.chem.csv", sep=";")
-div=all_data[!is.na(all_data$lg_n),] # remove rows with NA
+## PSEMS were tested with R 4.3.2
+## using packages:
+## lavaan 0.6-16
+## lavaan.survey 1.1.3.1 (note that it cannot be installed directly from CRAN; zip file must be downloaded from  https://cran.r-project.org/src/contrib/Archive/lavaan.survey/)
+## piecewiseSEM 2.3.0
 
-div$all.ani.q0=div$coll.q0+div$olig.q0+div$inse.q0+div$euka.ani.q0
+## ALSO TESTED WITH R 3.6.2:
+## piecewiseSEM 2.1.0
+## lavaan 0.6-15
+## lavaan.survey 1.1.3.1
+
+setwd("PUT YOUR PATH HERE")
+
+## Data
+beta.tot=read.csv("data/beta.biotic.plot.csv",header=T,stringsAsFactors=F)   # this file includes the beta-diversity values between plots
+div=read.table("data/div.clim.chem.csv", sep=",",header=T,stringsAsFactors=F)		# load the table with habitat features and the values of alpha-diversity
+
+div$all.ani.q0=div$coll.q0+div$olig.q0+div$inse.q0+div$euka.ani.q0  # the total diversity of animals, to remove (later) plots without detected animals
 
 ####################
 ## data selection ## - select the markers of interest and filter the table
@@ -94,9 +42,13 @@ div$all.ani.q0=div$coll.q0+div$olig.q0+div$inse.q0+div$euka.ani.q0
 nrow(beta.tot)					# 18,429 comparisons
 length(unique(beta.tot$glacier1))		# 46 glaciers
 
+
 ## remove glaciers / samples with incomplete soil data
-tokeep=unique(c(beta.tot$Plot1[which(beta.tot$Plot1 %in% div$uniqPlot==T)],
-		beta.tot$Plot2[which(beta.tot$Plot2 %in% div$uniqPlot==T)]))
+
+div=div[!is.na(div$n),] 
+
+tokeep=unique(c(beta.tot$Plot1[which(beta.tot$Plot1 %in% div$plot==T)],
+		beta.tot$Plot2[which(beta.tot$Plot2 %in% div$plot==T)]))
 
 beta.tot=beta.tot[which(beta.tot$Plot1 %in% tokeep & beta.tot$Plot2 %in% tokeep),]
 
@@ -104,11 +56,13 @@ nrow(beta.tot)					# 10,232 comparisons
 length(unique(beta.tot$glacier1))		# 32 glaciers
 
 
-all(beta.tot$Plot1 %in% div$uniqPlot==T)		# ok
-all(beta.tot$Plot2 %in% div$uniqPlot==T)
+all(beta.tot$Plot1 %in% div$plot==T)		# ok
+all(beta.tot$Plot2 %in% div$plot==T)
+
 
 ## remove samples with 0 species
-zero_plus=apply(div[,which(names(div) %in% c("sper.q0","bact.q0","fung.q0","all.ani.q0"))],		# eventually add ,"euka.uni.q0"
+
+zero_plus=apply(div[,which(names(div) %in% c("sper.q0","bact.q0","fung.q0","all.ani.q0"))],
 		MARGIN=1,FUN=function(x){all(x>0)})
 
 table(zero_plus)
@@ -116,12 +70,14 @@ table(zero_plus)
 	# FALSE  TRUE 
 	#   230   563
 
-tokeep=div$uniqPlot[which(zero_plus==T)]
+tokeep=div$plot[which(zero_plus==T)]
 beta.tot=beta.tot[which(beta.tot$Plot1 %in% tokeep & beta.tot$Plot2 %in% tokeep),]
 
 nrow(beta.tot)			# 5,741 - or 3,958 including euka.uni.q0
 
+
 # check for square matrices (within each glacier)
+
 comp=tapply(beta.tot$glacier1,INDEX=beta.tot$glacier1,FUN=function(x){length(x)})
 samp=tapply(c(beta.tot$Plot1,beta.tot$Plot2),INDEX=rep(beta.tot$glacier,2),FUN=function(x){length(unique(x))})
 
@@ -134,60 +90,76 @@ all(comp==comp2)							# ok
 
 # Note: apart for geographic distances, all the other have to rely on scaled values
 
-# Note: log-transform time, ndvi, n, p and twi before calculating distances / differences
-	# in the simpler case, this involves we are working with log(ratios) (log(time1)-log(time2) = log(time1/time2))
-
 beta.tot$time_diff=NA
 beta.tot$beta.geo=NA
 beta.tot$beta.microclim=NA
 beta.tot$ndvi_diff=NA
 beta.tot$ph_diff=NA
-beta.tot$beta.np=NA
-beta.tot$beta.soil=NA
+beta.tot$beta.npc=NA
 
 time=scale(div$time)				# variables (except geographic coordinates) must be scaled before calculating multivariate distances elsewhere the ones more variables will overly affect them
 ph=scale(div$ph)
 p=scale(div$p)
 n=scale(div$n)
-meanT=scale(div$meanT_new)
+c=scale(div$c)
+meanT=scale(div$mean.temp)
 twi=scale(div$twi)
 ndvi=scale(div$ndvi)
 
 for(i in 1:nrow(beta.tot)){
 
-	sel=which(div$uniqPlot %in% c(beta.tot$Plot1[i],beta.tot$Plot2[i]))
+	sel=which(div$plot %in% c(beta.tot$Plot1[i],beta.tot$Plot2[i]))
 	
 	beta.tot$time_diff[i]=dist(time[sel])
 	beta.tot$beta.microclim[i]=dist(cbind(meanT[sel],twi[sel]))
 	beta.tot$ndvi_diff[i]=dist(ndvi[sel])
 	beta.tot$ph_diff[i]=dist(ph[sel])
-	beta.tot$beta.np[i]=dist(cbind(n[sel],p[sel]))
-	beta.tot$beta.soil[i]=dist(cbind(n[sel],p[sel],ph[sel]))
-
+	beta.tot$beta.npc[i]=dist(cbind(n[sel],p[sel],c[sel]))		# CHANGE!! -> c added
 	beta.tot$beta.geo[i]=raster::pointDistance(p1=c(div$lon[sel][1],div$lat[sel][1]),p2=c(div$lon[sel][2],div$lat[sel][2]),lonlat=T)
 	
 }
 
+
 summary(beta.tot)			# NAs remaining in beta.coll, beta.euka.uni, beta.euka.animals, beta.inse, beta.olig (not to be used)
 
-### LOG-TRANSFORM VARIABLES (for all of them, the log transformation is the one allowing to best approach normality)
+
+
+#########################
+## data transformation ##
+#########################
+### LOG-TRANSFORM VARIABLES (for all of them, the log transformation is the transformation best improving normality)
 beta.tot$beta.microclim.lg=log(beta.tot$beta.microclim+0.01)
-beta.tot$beta.np.lg=log(beta.tot$beta.np)
+beta.tot$beta.npc.lg=log(beta.tot$beta.npc)	
 beta.tot$ph_diff.lg=log(beta.tot$ph_diff+0.01)
-beta.tot$beta.soil.lg=log(beta.tot$beta.soil)
 beta.tot$beta.geo.lg=log(beta.tot$beta.geo)
 beta.tot$ndvi.diff.lg=log(beta.tot$ndvi_diff+0.01)
 beta.tot$time_diff.lg=log(beta.tot$time_diff+0.5)
 
-## the PSEM MODEL ASSUMING CO-VARIATION BETWEEN BIOTIC VARIABLES AND SOIL
-psem=psem(
+
+
+## CHECK: AN EXAMPLE OF MIXED MODELS CONSIDERING PLANT BETA DIVERSITY
+
+lmer_sper=lmer(beta.sper ~ time_diff.lg+beta.geo.lg+ph_diff.lg+beta.npc.lg+beta.microclim.lg + (1|glacier1)+(1|Plot1) + (1|Plot2) , data=beta.tot, na.action = na.omit)
+
+summary(lmer_sper)
+
+r.squaredGLMM(lmer_sper)
+# R2m       R2c
+# [1,] 0.07249042 0.5340582
+
+######
+## STRUCTURAL EQUATION MODEL USING PSEM:
+######
+
+### WE USED A MODEL ASSUMING CO-VARIATION, AS IT WAS THE BEST SUPPORTED IN THE RICHNESS ANALYSIS
+
+psem_covary=psem(
   lmer_microclim=lmer(beta.microclim.lg ~ beta.geo.lg + (1|glacier1), data=beta.tot, na.action = na.omit),
   
   # env
-  lmer_ph=lmer(ph_diff.lg ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + (1|glacier1), data=beta.tot, na.action = na.omit),
-  lmer_np=lmer(beta.np.lg ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + (1|glacier1), data=beta.tot, na.action = na.omit),
+  lmer_ph=lmer(ph_diff.lg ~ time_diff.lg + beta.geo.lg + (1|glacier1), data=beta.tot, na.action = na.omit),
+  lmer_npc=lmer(beta.npc.lg ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + (1|glacier1), data=beta.tot, na.action = na.omit),
   
-  # lmer_soil=lmer(beta.soil.sc ~ time_diff.sc + beta.microclim.sc + beta.geo.sc +   (1|glacier1), data=beta.tot, na.action = na.omit),
   lmer_ndvi=lmer(ndvi.diff.lg ~ beta.sper + time_diff.lg + beta.microclim.lg + beta.geo.lg +ph_diff.lg+ (1|glacier1), data=beta.tot, na.action = na.omit),
   
   # biodiv
@@ -198,7 +170,7 @@ psem=psem(
   
   # Covariation env
   time_diff.lg %~~% beta.geo.lg,
-  time_diff.lg %~~% beta.microclim.lg,
+  # time_diff.lg %~~% beta.microclim.lg,
   
   # covariation between micro-organisms and plants
   beta.bact %~~% beta.sper,
@@ -208,16 +180,16 @@ psem=psem(
   ndvi.diff.lg %~~% beta.all.ani,
   ndvi.diff.lg %~~% beta.fung,
   ndvi.diff.lg %~~% beta.bact,
-  ndvi.diff.lg %~~% beta.np.lg,
+  ndvi.diff.lg %~~% beta.npc.lg,
   
   # Covariation with pH
-  ph_diff.lg %~~% beta.np.lg,
+  ph_diff.lg %~~% beta.npc.lg,
   
   # Biodiv covariation with nutrients
-  beta.np.lg %~~% beta.all.ani,
-  beta.np.lg %~~% beta.fung,
-  beta.np.lg %~~% beta.bact,
-  beta.np.lg %~~% beta.sper,
+  beta.npc.lg %~~% beta.all.ani,
+  beta.npc.lg %~~% beta.fung,
+  beta.npc.lg %~~% beta.bact,
+  beta.npc.lg %~~% beta.sper,
   
   # Covariation between biotic
   beta.bact %~~% beta.all.ani,
@@ -225,36 +197,440 @@ psem=psem(
   beta.fung %~~% beta.bact
 )
 
-s=summary(psem)
-BIC(psem)
-# 458.736
+# NOTE THAT I REMOVED THE RELATIONSHIPS: TIME-MICROCLIMATE; MICROCLIM-PH
+
+fisherC(psem_covary)
+# Fisher.C df P.Value
+# 1    4.225  4   0.376
+
+## the coefficients of the PSEM are here:
+(s=summary(psem_covary))
+
+###### NOW USE LAVAAN SURVEY TO CALCULATE BIC VALUES
+
+library(lavaan.survey)
+
+lavaan.covary<-'
+beta.microclim.lg ~ beta.geo.lg
+ph_diff.lg ~ time_diff.lg + beta.geo.lg+beta.microclim.lg
+beta.npc.lg ~ time_diff.lg + beta.microclim.lg + beta.geo.lg
+ndvi.diff.lg ~ time_diff.lg + beta.microclim.lg + beta.geo.lg +ph_diff.lg
+  
+beta.all.ani ~   beta.sper+time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg
+beta.bact ~                time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg
+beta.fung ~                time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg
+beta.sper ~                time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg
+  
+  time_diff.lg ~~ beta.geo.lg
+  ndvi.diff.lg ~~ beta.all.ani
+  ndvi.diff.lg ~~ beta.fung
+  ndvi.diff.lg ~~ beta.bact
+  ndvi.diff.lg ~~ beta.npc.lg
+  ndvi.diff.lg ~~ beta.sper 
+  ph_diff.lg ~~ beta.npc.lg
+  beta.npc.lg ~~ beta.all.ani
+  beta.npc.lg ~~ beta.fung
+  beta.npc.lg ~~ beta.bact
+  beta.npc.lg ~~ beta.sper
+  beta.bact ~~ beta.sper
+  beta.fung ~~ beta.sper
+  beta.bact ~~ beta.all.ani
+  beta.fung ~~ beta.all.ani
+  beta.fung ~~ beta.bact'
+
+
+fit_lavaan_covary <- sem(lavaan.covary, data=beta.tot)
+survey.design <- svydesign(ids=~date1+date2+glacier1, prob=~1, data=beta.tot)   ## the 2 sites involved in the comparison are used to take into account non-independence. This is different from pSEM because here we cannot use permutation tests. all fit measures are unchanged if these random factors are not included
+survey_covary <- lavaan.survey(lavaan.fit=fit_lavaan_covary, survey.design=survey.design)
+
+fitMeasures(survey_covary, c("chisq.scaled", "df.scaled", "pvalue.scaled", "rmsea.scaled", "SRMR", "BIC"))
+# chisq.scaled     df.scaled pvalue.scaled  rmsea.scaled          srmr           bic   
+# 0.030         1.000         0.861         0.000         0.001     50158.158
+
+###########################################################################################
+### ASSESS THE RELATIVE IMPORTANCE OF DIFFERENT PATHS USING BIC
+########################################################################################### 
+
+### rationale: starting from the covariation  model (fitted in lavaan.survey), we build nodels iteratively removing all the paths
+### BIC is used to assess the fit of each model
+### it is thus possible testing the average importance of paths representing the effects of habitat, time and biotic interactions
+
+formlist=list(
+"beta.all.ani~beta.sper+time_diff.lg+beta.microclim.lg+beta.geo.lg+ph_diff.lg",
+"beta.bact~time_diff.lg+beta.microclim.lg+beta.geo.lg+ph_diff.lg",
+"beta.fung~time_diff.lg+beta.microclim.lg+beta.geo.lg+ph_diff.lg",
+"beta.sper~time_diff.lg+beta.microclim.lg+beta.geo.lg+ph_diff.lg",
+"beta.npc.lg~~beta.all.ani",
+"beta.npc.lg~~beta.fung",
+"beta.npc.lg~~beta.bact",
+"beta.npc.lg~~beta.sper",
+"beta.bact~~beta.sper",
+"beta.fung~~beta.sper",
+"beta.bact~~beta.all.ani",
+"beta.fung~~beta.all.ani",
+"beta.fung~~beta.bact",
+"ph_diff.lg~time_diff.lg+beta.geo.lg+beta.microclim.lg",
+"beta.npc.lg~time_diff.lg+beta.microclim.lg+beta.geo.lg",
+"ndvi.diff.lg~time_diff.lg+beta.microclim.lg+beta.geo.lg+ph_diff.lg",
+"beta.microclim.lg~beta.geo.lg",
+"time_diff.lg~~beta.geo.lg",
+"ndvi.diff.lg~~beta.all.ani",
+"ndvi.diff.lg~~beta.fung",
+"ndvi.diff.lg~~beta.bact",
+"ndvi.diff.lg~~beta.npc.lg",
+"ndvi.diff.lg~~beta.sper",
+"ph_diff.lg~~beta.npc.lg",
+"beta.sper~~0*beta.all.ani"
+)
+  
+  
+out=vector("list",0)
+i=1
+
+## remove iteratively all the paths representing potential effects on biodiversity:
+for(i in 1:13){
+  print(i)
+  split=unlist(strsplit(formlist[[i]],split="\\~{1}"))		# this produces three elements when the formula is a co-variation
+  
+  if(length(split)==3){						# if this line represents a co-variation, completely remove i-th covariation (by using "0*")
+    
+    term1=split[1]
+    term2=split[3]
+    
+    formula=formlist
+    formula[[i]]=paste0(term1,"~~0*",term2)
+    
+    fit_lavaan_covary <- sem(paste0(formula,collapse="\n "), data=beta.tot)
+    survey.design <- svydesign(ids=~glacier1, prob=~1, data=beta.tot)
+    survey_covary <- lavaan.survey(lavaan.fit=fit_lavaan_covary, survey.design=survey.design)
+    bic=BIC(survey_covary)
+    out[[length(out)+1]]=c(formlist[[i]],formlist[[i]],bic)
+    
+  }else{								#  if this line represents a directional effect, iteratively removes each of the independent variables
+    
+    
+    dep=split[1]
+    ind=split[2]
+    
+    var=unlist(strsplit(ind,split="\\+|\\*"))
+    
+    for(j in 1:length(var)){
+      
+      jind=paste(var[-j],collapse="+")
+      
+      formula=formlist
+      formula[[i]]=paste(dep,jind,sep="~")
+      
+      fit_lavaan_covary <- sem(paste0(formula,collapse="\n "), data=beta.tot)
+      survey.design <- svydesign(ids=~glacier1, prob=~1, data=beta.tot)
+      survey_covary <- lavaan.survey(lavaan.fit=fit_lavaan_covary, survey.design=survey.design)
+      bic=BIC(survey_covary)
+      out[[length(out)+1]]=c(formlist[[i]],var[j],bic)
+    }
+  }
+}       
+
+res=matrix(unlist(out),length(out),3,byrow=T)
+colnames(res)=c("model","removed_variable","bic")
+summary(res)
+res=data.frame(res)
+res$bic=as.numeric(as.character(res$bic))
+res$delta_bic=res$bic-50158.158     ### calculate the change in BIC resulting from the removal of each variable. 50158.158 is the BIC of the full mdoel
+
+## for each path, define if it represents biotic effects (b), habitat (h) or time (t)
+type=c("Biot", "Time", "Habitat", " Geog", "Habitat", "Time", "Habitat", " Geog", "Habitat", "Time", "Habitat", " Geog", "Habitat", "Time", "Habitat", " Geog", "Habitat", "Habitat", "Habitat", "Habitat", "Habitat", "Biot", "Biot", "Biot", "Biot", "Biot")
+
+######################################################
+#  evaluate if the importance of processes is similar between boreal, temperate and tropical
+######################################################
+### CREATE 3 GEOGRAPHICALLY-RESTRICTED SUBSETS:
+
+bor=subset(div, div$lat>60|div$lat< -46)
+bb=unique(bor$Glacier)
+temperate=subset(div, div$lat<60&div$lat> -45)
+temperate=subset(temperate, temperate$lat>33|temperate$lat< -20)
+te=unique(temperate$Glacier)
+tropical=subset(div, div$lat<33&div$lat> -20)
+tr=unique(tropical$Glacier)
+
+boreal=beta.tot[beta.tot$glacier1 %in% bb, ]
+temp=beta.tot [beta.tot$glacier1 %in% te, ]
+trop=beta.tot [beta.tot$glacier1 %in% tr, ]
+
+####################################
+### ANALYSIS OF GEOGRAPHICAL SUBSETS USING PSEM
+####################################
+
+### BOREAL
+
+psem_covary_boreal=psem(
+  lmer_microclim=lmer(beta.microclim.lg ~ beta.geo.lg + (1|glacier1), data=boreal, na.action = na.omit),
+  
+  # env
+  lmer_ph=lmer(ph_diff.lg ~ time_diff.lg + beta.geo.lg + (1|glacier1), data=boreal, na.action = na.omit),
+  lmer_npc=lmer(beta.npc.lg ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + (1|glacier1), data=boreal, na.action = na.omit),
+  
+  lmer_ndvi=lmer(ndvi.diff.lg ~ beta.sper + time_diff.lg + beta.microclim.lg + beta.geo.lg +ph_diff.lg+ (1|glacier1), data=boreal, na.action = na.omit),
+  
+  # biodiv
+  lmer_animals=lmer(beta.all.ani ~ beta.sper + time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=boreal, na.action = na.omit),
+  lmer_bact=   lmer(beta.bact ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=boreal, na.action = na.omit),
+  lmer_fung=   lmer(beta.fung ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=boreal, na.action = na.omit),
+  lmer_sper=   lmer(beta.sper ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=boreal, na.action = na.omit),
+  
+  # Covariation env
+  time_diff.lg %~~% beta.geo.lg,
+  # time_diff.lg %~~% beta.microclim.lg,
+  
+  # covariation between micro-organisms and plants
+  beta.bact %~~% beta.sper,
+  beta.fung %~~% beta.sper,
+  
+  # Biodiv covariation with NDVI
+  ndvi.diff.lg %~~% beta.all.ani,
+  ndvi.diff.lg %~~% beta.fung,
+  ndvi.diff.lg %~~% beta.bact,
+  ndvi.diff.lg %~~% beta.npc.lg,
+  
+  # Covariation with pH
+  ph_diff.lg %~~% beta.npc.lg,
+  
+  # Biodiv covariation with nutrients
+  beta.npc.lg %~~% beta.all.ani,
+  beta.npc.lg %~~% beta.fung,
+  beta.npc.lg %~~% beta.bact,
+  beta.npc.lg %~~% beta.sper,
+  
+  # Covariation between biotic
+  beta.bact %~~% beta.all.ani,
+  beta.fung %~~% beta.all.ani,
+  beta.fung %~~% beta.bact
+)
+
+
+### temperate
+
+psem_covary_temperate=psem(
+  lmer_microclim=lmer(beta.microclim.lg ~ beta.geo.lg + (1|glacier1), data=temp, na.action = na.omit),
+  
+  # env
+  lmer_ph=lmer(ph_diff.lg ~ time_diff.lg + beta.geo.lg + (1|glacier1), data=temp, na.action = na.omit),
+  lmer_npc=lmer(beta.npc.lg ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + (1|glacier1), data=temp, na.action = na.omit),
+  
+  lmer_ndvi=lmer(ndvi.diff.lg ~ beta.sper + time_diff.lg + beta.microclim.lg + beta.geo.lg +ph_diff.lg+ (1|glacier1), data=temp, na.action = na.omit),
+  
+  # biodiv
+  lmer_animals=lmer(beta.all.ani ~ beta.sper + time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=temp, na.action = na.omit),
+  lmer_bact=   lmer(beta.bact ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=temp, na.action = na.omit),
+  lmer_fung=   lmer(beta.fung ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=temp, na.action = na.omit),
+  lmer_sper=   lmer(beta.sper ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=temp, na.action = na.omit),
+  
+  # Covariation env
+  time_diff.lg %~~% beta.geo.lg,
+  # time_diff.lg %~~% beta.microclim.lg,
+  
+  # covariation between micro-organisms and plants
+  beta.bact %~~% beta.sper,
+  beta.fung %~~% beta.sper,
+  
+  # Biodiv covariation with NDVI
+  ndvi.diff.lg %~~% beta.all.ani,
+  ndvi.diff.lg %~~% beta.fung,
+  ndvi.diff.lg %~~% beta.bact,
+  ndvi.diff.lg %~~% beta.npc.lg,
+  
+  # Covariation with pH
+  ph_diff.lg %~~% beta.npc.lg,
+  
+  # Biodiv covariation with nutrients
+  beta.npc.lg %~~% beta.all.ani,
+  beta.npc.lg %~~% beta.fung,
+  beta.npc.lg %~~% beta.bact,
+  beta.npc.lg %~~% beta.sper,
+  
+  # Covariation between biotic
+  beta.bact %~~% beta.all.ani,
+  beta.fung %~~% beta.all.ani,
+  beta.fung %~~% beta.bact
+)
+
+### tropical
+
+psem_covary_tropical=psem(
+  lmer_microclim=lmer(beta.microclim.lg ~ beta.geo.lg + (1|glacier1), data=trop, na.action = na.omit),
+  
+  # env
+  lmer_ph=lmer(ph_diff.lg ~ time_diff.lg + beta.geo.lg + (1|glacier1), data=trop, na.action = na.omit),
+  lmer_npc=lmer(beta.npc.lg ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + (1|glacier1), data=trop, na.action = na.omit),
+  
+  lmer_ndvi=lmer(ndvi.diff.lg ~ beta.sper + time_diff.lg + beta.microclim.lg + beta.geo.lg +ph_diff.lg+ (1|glacier1), data=trop, na.action = na.omit),
+  
+  # biodiv
+  lmer_animals=lmer(beta.all.ani ~ beta.sper + time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=trop, na.action = na.omit),
+  lmer_bact=   lmer(beta.bact ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=trop, na.action = na.omit),
+  lmer_fung=   lmer(beta.fung ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=trop, na.action = na.omit),
+  lmer_sper=   lmer(beta.sper ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=trop, na.action = na.omit),
+  
+  # Covariation env
+  time_diff.lg %~~% beta.geo.lg,
+  # time_diff.lg %~~% beta.microclim.lg,
+  
+  # covariation between micro-organisms and plants
+  beta.bact %~~% beta.sper,
+  beta.fung %~~% beta.sper,
+  
+  # Biodiv covariation with NDVI
+  ndvi.diff.lg %~~% beta.all.ani,
+  ndvi.diff.lg %~~% beta.fung,
+  ndvi.diff.lg %~~% beta.bact,
+  ndvi.diff.lg %~~% beta.npc.lg,
+  
+  # Covariation with pH
+  ph_diff.lg %~~% beta.npc.lg,
+  
+  # Biodiv covariation with nutrients
+  beta.npc.lg %~~% beta.all.ani,
+  beta.npc.lg %~~% beta.fung,
+  beta.npc.lg %~~% beta.bact,
+  beta.npc.lg %~~% beta.sper,
+  
+  # Covariation between biotic
+  beta.bact %~~% beta.all.ani,
+  beta.fung %~~% beta.all.ani,
+  beta.fung %~~% beta.bact
+)
+
+### PUT TOGHETHER COEFFICIENTS TO MAKE COMPARISONS
+
+tab_res_psem_all=summary(psem_covary)$coefficients
+tab_res_psem_boreal=summary(psem_covary_boreal)$coefficients
+tab_res_psem_temperate=summary(psem_covary_temperate)$coefficients
+tab_res_psem_tropical=summary(psem_covary_tropical)$coefficients
+
+typology_psem=c("other", "other", "other", "other", "other", "other", "other", "other", "other", "other", "other", "b", "t", "h", "other", "h", "t", "h", "other", "h", "t", "h", "other", "h", "t", "h", "other", "h", "other", "b", "b", "h", "h", "h", "other", "other", "h", "h", "h", "h", "b", "b", "b")
+
+tab_res_psem=cbind(abs(tab_res_psem_all$Std.Estimate), abs(tab_res_psem_boreal$Std.Estimate), abs(tab_res_psem_temperate$Std.Estimate), abs(tab_res_psem_tropical$Std.Estimate), typology_psem)
+colnames(tab_res_psem)<-c("All", "Boreal", "Temperate", "Tropical", "Type")
+tab_res_psem=tab_res_psem[!tab_res_psem[,5]=="other",]
+tab_res_psem=data.frame(tab_res_psem)
+tab_res_psem$All=as.numeric(as.character(tab_res_psem$All))
+tab_res_psem$Boreal=as.numeric(as.character(tab_res_psem$Boreal))
+tab_res_psem$Temperate=as.numeric(as.character(tab_res_psem$Temperate))
+tab_res_psem$Tropical=as.numeric(as.character(tab_res_psem$Tropical))
+
+### PLOTS
+################################ 
+### PLOTS WITH THE STANDARDIZED EFFECTS
+################################ 
+
+## all the landscapes
+gg_all= ggplot(tab_res_psem, aes(x = Type, y =  All, fill = Type, col=Type)) +
+  geom_boxplot(alpha=0.6, fatten = NULL, show.legend = FALSE,   outlier.shape = NA) +#fatten avoids plotting the median
+  stat_summary(fun.y = median, col="black", geom = "errorbar", aes(ymax = ..y.., ymin = ..y..),
+               width = 0.75, size = 1, linetype = "solid", show.legend = FALSE)+
+  scale_colour_manual(values=c( "#44bb99",  "#EEDD88","#FFAABB"))+
+  scale_fill_manual(values=c("#44bb99",  "#EEDD88","#FFAABB"))+
+  ylim(0,0.5)+
+  geom_point(    position = position_jitter(width = 0.1), size = 3,   shape = 19,  show.legend = FALSE)+
+  ylab("")+
+  xlab("")+
+  theme_minimal()
+
+## tropical only
+gg_trop=ggplot(tab_res_psem, aes(x = Type, y =  Tropical , fill = Type, col=Type)) +
+  geom_boxplot(alpha=0.6, fatten = NULL, show.legend = FALSE,   outlier.shape = NA) +#fatten avoids plotting the median
+  stat_summary(fun.y = median, col="black", geom = "errorbar", aes(ymax = ..y.., ymin = ..y..),
+               width = 0.75, size = 1, linetype = "solid", show.legend = FALSE)+
+  scale_colour_manual(values=c( "#44bb99",  "#EEDD88","#FFAABB"))+
+  scale_fill_manual(values=c("#44bb99",  "#EEDD88","#FFAABB"))+
+  geom_point(    position = position_jitter(width = 0.1), size = 3,   shape = 19,  show.legend = FALSE)+
+  ylim(0,0.5)+
+  ylab("")+
+  xlab("")+
+  theme_minimal()
+
+## temperate only
+gg_temp=ggplot(tab_res_psem, aes(x = Type, y =  Temperate, fill = Type, col=Type)) +
+  geom_boxplot(alpha=0.6, fatten = NULL, show.legend = FALSE,   outlier.shape = NA) +#fatten avoids plotting the median
+  stat_summary(fun.y = median, col="black", geom = "errorbar", aes(ymax = ..y.., ymin = ..y..),
+               width = 0.75, size = 1, linetype = "solid", show.legend = FALSE)+
+  scale_colour_manual(values=c( "#44bb99",  "#EEDD88","#FFAABB"))+
+  scale_fill_manual(values=c("#44bb99",  "#EEDD88","#FFAABB"))+
+  geom_point(    position = position_jitter(width = 0.1), size = 3,   shape = 19,  show.legend = FALSE)+
+  ylim(0,0.5)+
+  ylab("")+
+  xlab("")+
+  theme_minimal()
+
+## boreal only
+gg_bor=ggplot(tab_res_psem, aes(x = Type, y =  Boreal, fill = Type, col=Type)) +
+  geom_boxplot(alpha=0.6, fatten = NULL, show.legend = FALSE,   outlier.shape = NA) +#fatten avoids plotting the median
+  stat_summary(fun.y = median, col="black", geom = "errorbar", aes(ymax = ..y.., ymin = ..y..),
+               width = 0.75, size = 1, linetype = "solid", show.legend = FALSE)+
+  scale_colour_manual(values=c( "#44bb99",  "#EEDD88","#FFAABB"))+
+  scale_fill_manual(values=c("#44bb99",  "#EEDD88","#FFAABB"))+
+  geom_point(    position = position_jitter(width = 0.1), size = 3,   shape = 19,  show.legend = FALSE)+
+  ylim(0,0.5)+
+  ylab("")+
+  xlab("")+
+  theme_minimal()
+
+# PLOT THE GEOGRAPHICALLY-RESTRICTED DATASETS TOGHETHER:
+x11(width=5,heigh=3)
+grid.arrange(gg_all, gg_bor, gg_temp, gg_trop, nrow = 1)
+
+### PLOT THE RELATIVE IMPORTANCE ASSESSED BY BIC DROP
+res_bic=cbind(res, type)
+res_bic=res_bic[!res_bic$type==" Geog",]  ## only keep paths representing the effects of biotic variables, habitat or time
+
+x11(width=5,height = 3)
+ggplot(res_bic, aes(x = type, y =  delta_bic, fill = type, col=type)) +
+  geom_boxplot(alpha=0.6, fatten = NULL, show.legend = FALSE,   outlier.shape = NA) +#fatten avoids plotting the median
+  stat_summary(fun.y = median, col="black", geom = "errorbar", aes(ymax = ..y.., ymin = ..y..),
+               width = 0.75, size = 1, linetype = "solid", show.legend = FALSE)+
+  scale_colour_manual(values=c("#44bb99",  "#EEDD88","#FFAABB"))+
+  scale_fill_manual(values=c("#44bb99",  "#EEDD88","#FFAABB"))+
+  geom_point(    position = position_jitter(width = 0.1), size = 3,   shape = 19,  show.legend = FALSE)+
+  ylab("")+
+  xlab("")+
+  theme_minimal()
+
+### EXPORT TABLES OF DATA USED TO BILD FIG 3C AND FIG 3D
+write.table(res_bic, "bic_iterative_exclusion_beta.txt", row.names = F)  # to export and explore the results
+write.table(tab_res_psem, "psem_standardized_coefficients_beta.txt", row.names = F)  # to export and explore the results
+
+
+#################################################################
+### SCRIPT TO CALCULATE SIGNIFICANCE OF COEFFICIENTS USING PERMUTATIONS
+##################################################################
+
+# please note that it requires several hours to be run with 10,000 permutations. Only run it if you want to produce all the significance values
 
 # retrieve observed coefficients (corrected by "/sqrt(1-R2)"), covariances and R2
 
-resp=c("beta.microclim.lg","ph_diff.lg","beta.np.lg","ndvi.diff.lg","beta.bact","beta.fung","beta.sper", "beta.all.ani")
+resp=c("beta.microclim.lg","ph_diff.lg","beta.npc.lg","ndvi.diff.lg","beta.bact","beta.fung","beta.sper", "beta.all.ani")
 
 obs=numeric(nrow(s$coefficients)+nrow(s$R2))
 names(obs)=c(paste0(s$coefficients$Response,"|",s$coefficients$Predictor),			# coefficients and covariances
-		paste0("R2_",s$R2$Response))
+             paste0("R2_",s$R2$Response))
 
 for(i in 1:length(resp)){
-
-	sel.coef=grep(paste0("^",resp[i]),s$coefficients$Response)
-	sel.cov=grep(paste0("^\\~\\~",resp[i]),s$coefficients$Response)
-	sel.r=grep(resp[i],s$R2$Response)
-	
-	obs[sel.coef]=s$coefficients$Estimate[sel.coef]/sqrt(1-s$R2$Conditional[sel.r])		# coefficients - pseudo-t test
-	obs[sel.cov]=s$coefficients$Estimate[sel.cov]						# covariace - to be treated as a typical Mantel (use as-is)
-	obs[nrow(s$coefficients)+sel.r]=s$R2$Conditional[sel.r]					# Rsquared - to be treated as a typical Mantel (use as-is)
-
+  
+  sel.coef=grep(paste0("^",resp[i]),s$coefficients$Response)
+  sel.cov=grep(paste0("^\\~\\~",resp[i]),s$coefficients$Response)
+  sel.r=grep(resp[i],s$R2$Response)
+  
+  obs[sel.coef]=s$coefficients$Estimate[sel.coef]/sqrt(1-s$R2$Conditional[sel.r])		# coefficients - pseudo-t test
+  obs[sel.cov]=s$coefficients$Estimate[sel.cov]						# covariace - to be treated as a typical Mantel (use as-is)
+  obs[nrow(s$coefficients)+sel.r]=s$R2$Conditional[sel.r]					# Rsquared - to be treated as a typical Mantel (use as-is)
+  
 }
 
-
 #############
-## PERMUTATION TEST ##
+## Permute ##
 #############
 
-nperm=9999
+nperm=9                                 # running permutations is very long. we suggest using 10,000 permutations
 sink("permutations.txt",append=T)				# open permutations.txt in your wd (and scroll down to the end) to see progress
 
 Ncores=detectCores()-3						# 3 cores used
@@ -263,138 +639,136 @@ cl=makeCluster(Ncores,outfile="permutations.txt")
 clusterSetRNGStream(cl,1234567)					# set.seed
 
 clusterExport(cl,						# allow parallel to see *data* of interest for the function
-		c("nperm",
-		"Ncores",
-		#"pb",
-		"resp",
-		"s",
-		"beta.tot"))
+              c("nperm",
+                "Ncores",
+                #"pb",
+                "resp",
+                "s",
+                "beta.tot"))
 
 clusterEvalQ(cl,						# allow parallel to see *packages* of interest for the function
-	c(library(piecewiseSEM),
-	library(lme4),
-	library(lmerTest),
-	library(car),
-	library(MASS),
-	library(MuMIn))) 
+             c(library(piecewiseSEM),
+               library(lme4),
+               library(lmerTest),
+               library(car),
+               library(MASS),
+               library(MuMIn))) 
 
 start.time=Sys.time()
 
 perm=parLapply(cl,
-	1:nperm,
-	fun=function(x){
-	
-		# print (to sink file) the % work executed by the first core
-		
-		if(x<(nperm/Ncores)){cat(paste0("Executed: ",round((x/(nperm/Ncores))*100,2),"%"),sep="\n")}
-			
-		if(x==1){
-
-				# observed values are on the first row - conservative: cf. Legendre et al., 1994 and Hope, 1968
-					# we treated them outside the parLapply to simplify the function (i.e., avoid to repeat the psem() function twice)
-
-		}else{
-
-			exp=numeric(nrow(s$coefficients)+nrow(s$R2))
-			names(exp)=c(paste0(s$coefficients$Response,"|",s$coefficients$Predictor),
-					paste0("R2_",s$R2$Response))
-
-
-			for(i in 1:length(resp)){
-
-				data=beta.tot
-
-				for(j in 1:length(unique(data$glacier1))){						# within glacier permutation
-
-					sub=data[which(data$glacier1==unique(data$glacier1)[j]),]
-
-					lev=unique(c(sub$Plot1,sub$Plot2))
-
-					r=as.integer(factor(sub$Plot1,levels=lev))
-					c=as.integer(factor(sub$Plot2,levels=lev))
-					D=sub[,which(names(sub)==resp[i])]
-
-					m=matrix(NA,length(lev),length(lev))
-					m[cbind(r,c)]=m[cbind(c,r)]=D
-
-					samp=sample(nrow(m))
-					m=m[samp,samp]
-
-					D1=m[cbind(r,c)]
-
-					# cbind(sub$Plot1,sub$Plot2,D,D1)
-						# just to check (i=1,j=1 - amola_1850) 
-						# ok, values are transferred between samples
-
-					data[which(data$glacier1==unique(data$glacier1)[j]),which(names(data)==resp[i])]=D1
-
-				}
-
-
-				psem_x = psem(
-					  lmer_microclim=lmer(beta.microclim.lg ~ beta.geo.lg + (1|glacier1), data=data, na.action = na.omit),
-
-					  # env
-					  lmer_ph=lmer(ph_diff.lg ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + (1|glacier1), data=data, na.action = na.omit),
-					  lmer_np=lmer(beta.np.lg ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + (1|glacier1), data=data, na.action = na.omit),
-
-					  # lmer_soil=lmer(beta.soil.sc ~ time_diff.sc + beta.microclim.sc + beta.geo.sc +   (1|glacier1), data=data, na.action = na.omit),
-					  lmer_ndvi=lmer(ndvi.diff.lg ~ beta.sper + time_diff.lg + beta.microclim.lg + beta.geo.lg +ph_diff.lg+ (1|glacier1), data=data, na.action = na.omit),
-
-					  # biodiv
-					  lmer_animals=lmer(beta.all.ani ~ beta.sper + time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=data, na.action = na.omit),
-					  lmer_bact=   lmer(beta.bact ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=data, na.action = na.omit),
-					  lmer_fung=   lmer(beta.fung ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=data, na.action = na.omit),
-					  lmer_sper=   lmer(beta.sper ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=data, na.action = na.omit),
-
-					  # Covariation env
-					  time_diff.lg %~~% beta.geo.lg,
-					  time_diff.lg %~~% beta.microclim.lg,
-
-					  # covariation between micro-organisms and plants
-					  beta.bact %~~% beta.sper,
-					  beta.fung %~~% beta.sper,
-
-					  # Biodiv covariation with NDVI
-					  ndvi.diff.lg %~~% beta.all.ani,
-					  ndvi.diff.lg %~~% beta.fung,
-					  ndvi.diff.lg %~~% beta.bact,
-					  ndvi.diff.lg %~~% beta.np.lg,
-
-					  # Covariation with pH
-					  ph_diff.lg %~~% beta.np.lg,
-
-					  # Biodiv covariation with nutrients
-					  beta.np.lg %~~% beta.all.ani,
-					  beta.np.lg %~~% beta.fung,
-					  beta.np.lg %~~% beta.bact,
-					  beta.np.lg %~~% beta.sper,
-
-					  # Covariation between biotic
-					  beta.bact %~~% beta.all.ani,
-					  beta.fung %~~% beta.all.ani,
-					  beta.fung %~~% beta.bact
-					)
-
-
-				s_x=summary(psem_x)
-
-				sel.coef=grep(paste0("^",resp[i]),s_x$coefficients$Response)
-				sel.cov=grep(paste0("^\\~\\~",resp[i]),s_x$coefficients$Response)
-				sel.r=grep(resp[i],s_x$R2$Response)
-
-				exp[sel.coef]=s_x$coefficients$Estimate[sel.coef]/sqrt(1-s_x$R2$Conditional[sel.r])
-				exp[sel.cov]=s_x$coefficients$Estimate[sel.cov]
-				exp[nrow(s$coefficients)+sel.r]=s_x$R2$Conditional[sel.r]
-
-			}
-
-
-			return(exp)
-
-		}
-	
-})
+               1:nperm,
+               fun=function(x){
+                 
+                 # print (to sink file) the % work executed by the first core
+                 
+                 if(x<(nperm/Ncores)){cat(paste0("Executed: ",round((x/(nperm/Ncores))*100,2),"%"),sep="\n")}
+                 
+                 if(x==1){
+                   
+                   # observed values are on the first row - conservative: cf. Legendre et al., 1994 and Hope, 1968
+                   # we treated them outside the parLapply to simplify the function (i.e., avoid to repeat the psem() function twice)
+                   
+                 }else{
+                   
+                   exp=numeric(nrow(s$coefficients)+nrow(s$R2))
+                   names(exp)=c(paste0(s$coefficients$Response,"|",s$coefficients$Predictor),
+                                paste0("R2_",s$R2$Response))
+                   
+                   
+                   for(i in 1:length(resp)){
+                     
+                     data=beta.tot
+                     
+                     for(j in 1:length(unique(data$glacier1))){						# within glacier permutation
+                       
+                       sub=data[which(data$glacier1==unique(data$glacier1)[j]),]
+                       
+                       lev=unique(c(sub$Plot1,sub$Plot2))
+                       
+                       r=as.integer(factor(sub$Plot1,levels=lev))
+                       c=as.integer(factor(sub$Plot2,levels=lev))
+                       D=sub[,which(names(sub)==resp[i])]
+                       
+                       m=matrix(NA,length(lev),length(lev))
+                       m[cbind(r,c)]=m[cbind(c,r)]=D
+                       
+                       samp=sample(nrow(m))
+                       m=m[samp,samp]
+                       
+                       D1=m[cbind(r,c)]
+                       
+                       # cbind(sub$Plot1,sub$Plot2,D,D1)
+                       # just to check (i=1,j=1 - amola_1850) 
+                       # ok, values are transferred between samples
+                       
+                       data[which(data$glacier1==unique(data$glacier1)[j]),which(names(data)==resp[i])]=D1
+                       
+                     }
+                     
+                     
+                     psem_x = psem(
+                       lmer_microclim=lmer(beta.microclim.lg ~ beta.geo.lg + (1|glacier1), data=data, na.action = na.omit),
+                       
+                       # env
+                       lmer_ph=lmer(ph_diff.lg ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + (1|glacier1), data=data, na.action = na.omit),
+                       lmer_np=lmer(beta.npc.lg ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + (1|glacier1), data=data, na.action = na.omit),
+                       
+                       lmer_ndvi=lmer(ndvi.diff.lg ~ beta.sper + time_diff.lg + beta.microclim.lg + beta.geo.lg +ph_diff.lg+ (1|glacier1), data=data, na.action = na.omit),
+                       
+                       # biodiv
+                       lmer_animals=lmer(beta.all.ani ~ beta.sper + time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=data, na.action = na.omit),
+                       lmer_bact=   lmer(beta.bact ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=data, na.action = na.omit),
+                       lmer_fung=   lmer(beta.fung ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=data, na.action = na.omit),
+                       lmer_sper=   lmer(beta.sper ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=data, na.action = na.omit),
+                       
+                       # Covariation env
+                       time_diff.lg %~~% beta.geo.lg,
+                       
+                       # covariation between micro-organisms and plants
+                       beta.bact %~~% beta.sper,
+                       beta.fung %~~% beta.sper,
+                       
+                       # Biodiv covariation with NDVI
+                       ndvi.diff.lg %~~% beta.all.ani,
+                       ndvi.diff.lg %~~% beta.fung,
+                       ndvi.diff.lg %~~% beta.bact,
+                       ndvi.diff.lg %~~% beta.npc.lg,
+                       
+                       # Covariation with pH
+                       ph_diff.lg %~~% beta.npc.lg,
+                       
+                       # Biodiv covariation with nutrients
+                       beta.npc.lg %~~% beta.all.ani,
+                       beta.npc.lg %~~% beta.fung,
+                       beta.npc.lg %~~% beta.bact,
+                       beta.npc.lg %~~% beta.sper,
+                       
+                       # Covariation between biotic
+                       beta.bact %~~% beta.all.ani,
+                       beta.fung %~~% beta.all.ani,
+                       beta.fung %~~% beta.bact
+                     )
+                     
+                     
+                     s_x=summary(psem_x)
+                     
+                     sel.coef=grep(paste0("^",resp[i]),s_x$coefficients$Response)
+                     sel.cov=grep(paste0("^\\~\\~",resp[i]),s_x$coefficients$Response)
+                     sel.r=grep(resp[i],s_x$R2$Response)
+                     
+                     exp[sel.coef]=s_x$coefficients$Estimate[sel.coef]/sqrt(1-s_x$R2$Conditional[sel.r])
+                     exp[sel.cov]=s_x$coefficients$Estimate[sel.cov]
+                     exp[nrow(s$coefficients)+sel.r]=s_x$R2$Conditional[sel.r]
+                     
+                   }
+                   
+                   
+                   return(exp)
+                   
+                 }
+                 
+               })
 
 end.time=Sys.time()
 end.time-start.time
@@ -413,9 +787,9 @@ save(s,names,perm,file="permutations_out.RData")
 
 print(load("permutations_out.RData"))
 
-print(load("permutations_out_np.RData"))
-	# [1] "s"     "names" "perm"
-	
+print(load("permutations_out_npc.RData"))
+# [1] "s"     "names" "perm"
+
 perm=matrix(unlist(perm),nperm,length(perm[[1]]),byrow=T)		# list to matrix
 
 pval=apply(perm,MARGIN=2,FUN=function(x){length(which(abs(x)>=abs(x[1])))/nperm})
@@ -441,282 +815,5 @@ sum.R2=s$R2
 sum.coef$P_ours=paste0(round(pval[-grep("^R2",names)],3)," ",class[-grep("^R2",names)])
 sum.R2$P_ours=paste0(round(pval[grep("^R2",names)],3)," ",class[grep("^R2",names)])
 
-
 sum.coef
 sum.R2
-
-write.csv(sum.coef,"coefs.csv",row.names=F)
-write.csv(sum.R2,"R2.csv",row.names=F)
-
-
-#######################################################
-#######################################################
-#######################################################
-### MODELS WITHOUT KEY COMPONENTS OF THE SYSTEM
-
-### THE MODEL WITHOUT BIOTIC INTERACTIONS
-
-psem_nobio=psem(
-  lmer_microclim=lmer(beta.microclim.lg ~ beta.geo.lg + (1|glacier1), data=beta.tot, na.action = na.omit),
-  
-  # env
-  lmer_ph=lmer(ph_diff.lg ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + (1|glacier1), data=beta.tot, na.action = na.omit),
-  lmer_np=lmer(beta.np.lg ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + (1|glacier1), data=beta.tot, na.action = na.omit),
-  
-  # lmer_soil=lmer(beta.soil.sc ~ time_diff.sc + beta.microclim.sc + beta.geo.sc +   (1|glacier1), data=beta.tot, na.action = na.omit),
-  lmer_ndvi=lmer(ndvi.diff.lg ~ beta.sper + time_diff.lg + beta.microclim.lg + beta.geo.lg +ph_diff.lg+ (1|glacier1), data=beta.tot, na.action = na.omit),
-  
-  # biodiv
-  lmer_animals=lmer(beta.all.ani ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=beta.tot, na.action = na.omit),
-  lmer_bact=   lmer(beta.bact ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=beta.tot, na.action = na.omit),
-  lmer_fung=   lmer(beta.fung ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=beta.tot, na.action = na.omit),
-  lmer_sper=   lmer(beta.sper ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=beta.tot, na.action = na.omit),
-  
-  # Covariation env
-  time_diff.lg %~~% beta.geo.lg,
-  time_diff.lg %~~% beta.microclim.lg,
-
-  # Biodiv covariation with NDVI
-  ndvi.diff.lg %~~% beta.all.ani,
-  ndvi.diff.lg %~~% beta.fung,
-  ndvi.diff.lg %~~% beta.bact,
-  ndvi.diff.lg %~~% beta.np.lg,
-  
-  # Covariation with pH
-  ph_diff.lg %~~% beta.np.lg,
-  
-  # Biodiv covariation with nutrients
-  beta.np.lg %~~% beta.all.ani,
-  beta.np.lg %~~% beta.fung,
-  beta.np.lg %~~% beta.bact,
-  beta.np.lg %~~% beta.sper
-)
-summary(psem_nobio)
-# Fisher's C = 2187.683 with P-value = 0 and on 12 degrees of freedom
-
-BIC(psem_nobio)
-# 2637.763
-
-###############
-## THE MODEL WITHOUT THE EFFECTS OF HABITAT ON BIODIVERSITY
-###############
-
-psem_nohabitat=psem(
-  lmer_microclim=lmer(beta.microclim.lg ~ beta.geo.lg + (1|glacier1), data=beta.tot, na.action = na.omit),
-  
-  # env
-  lmer_ph=lmer(ph_diff.lg ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + (1|glacier1), data=beta.tot, na.action = na.omit),
-  lmer_np=lmer(beta.np.lg ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + (1|glacier1), data=beta.tot, na.action = na.omit),
-  
-  # lmer_soil=lmer(beta.soil.sc ~ time_diff.sc + beta.microclim.sc + beta.geo.sc +   (1|glacier1), data=beta.tot, na.action = na.omit),
-  lmer_ndvi=lmer(ndvi.diff.lg ~ beta.sper + time_diff.lg + beta.microclim.lg + beta.geo.lg +ph_diff.lg+ (1|glacier1), data=beta.tot, na.action = na.omit),
-  
-  # biodiv
-  lmer_animals=lmer(beta.all.ani ~ beta.sper + time_diff.lg + beta.geo.lg + (1|glacier1), data=beta.tot, na.action = na.omit),
-  lmer_bact=   lmer(beta.bact ~ time_diff.lg + beta.geo.lg + (1|glacier1), data=beta.tot, na.action = na.omit),
-  lmer_fung=   lmer(beta.fung ~ time_diff.lg + beta.geo.lg + (1|glacier1), data=beta.tot, na.action = na.omit),
-  lmer_sper=   lmer(beta.sper ~ time_diff.lg + beta.geo.lg + (1|glacier1), data=beta.tot, na.action = na.omit),
-  
-  # Covariation env
-  time_diff.lg %~~% beta.geo.lg,
-  time_diff.lg %~~% beta.microclim.lg,
-  
-  # covariation between micro-organisms and plants
-  beta.bact %~~% beta.sper,
-  beta.fung %~~% beta.sper,
-  
-  # Biodiv covariation with NDVI
-  # ndvi.diff.lg %~~% beta.all.ani,
-  # ndvi.diff.lg %~~% beta.fung,
-  # ndvi.diff.lg %~~% beta.bact,
-   ndvi.diff.lg %~~% beta.np.lg,
-  
-  # Covariation with pH
-  ph_diff.lg %~~% beta.np.lg,
-  
-  # Biodiv covariation with nutrients
-  # beta.np.lg %~~% beta.all.ani,
-  # beta.np.lg %~~% beta.fung,
-  # beta.np.lg %~~% beta.bact,
-  # beta.np.lg %~~% beta.sper,
-  
-  # Covariation between biotic
-  beta.bact %~~% beta.all.ani,
-  beta.fung %~~% beta.all.ani,
-  beta.fung %~~% beta.bact
-)
-
-summary(psem_nohabitat)
-# Fisher's C = 657.433 with P-value = 0 and on 30 degrees of freedom
-
-
-BIC(psem_nohabitat)
-# 1046.925
-
-
-###############
-## THE MODEL WITHOUT THE direct EFFECTS OF TIME ON BIODIVERSITY
-###############
-
-psem_notime=psem(
-  lmer_microclim=lmer(beta.microclim.lg ~ beta.geo.lg + (1|glacier1), data=beta.tot, na.action = na.omit),
-  
-  # env
-  lmer_ph=lmer(ph_diff.lg ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + (1|glacier1), data=beta.tot, na.action = na.omit),
-  lmer_np=lmer(beta.np.lg ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + (1|glacier1), data=beta.tot, na.action = na.omit),
-  
-  # lmer_soil=lmer(beta.soil.sc ~ time_diff.sc + beta.microclim.sc + beta.geo.sc +   (1|glacier1), data=beta.tot, na.action = na.omit),
-  lmer_ndvi=lmer(ndvi.diff.lg ~ beta.sper + time_diff.lg + beta.microclim.lg + beta.geo.lg +ph_diff.lg+ (1|glacier1), data=beta.tot, na.action = na.omit),
-  
-  # biodiv
-  lmer_animals=lmer(beta.all.ani ~ beta.sper + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=beta.tot, na.action = na.omit),
-  lmer_bact=   lmer(beta.bact ~ beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=beta.tot, na.action = na.omit),
-  lmer_fung=   lmer(beta.fung ~ beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=beta.tot, na.action = na.omit),
-  lmer_sper=   lmer(beta.sper ~ beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=beta.tot, na.action = na.omit),
-  
-  # Covariation env
-  time_diff.lg %~~% beta.geo.lg,
-  time_diff.lg %~~% beta.microclim.lg,
-  
-  # covariation between micro-organisms and plants
-  beta.bact %~~% beta.sper,
-  beta.fung %~~% beta.sper,
-  
-  # Biodiv covariation with NDVI
-  ndvi.diff.lg %~~% beta.all.ani,
-  ndvi.diff.lg %~~% beta.fung,
-  ndvi.diff.lg %~~% beta.bact,
-  ndvi.diff.lg %~~% beta.np.lg,
-  
-  # Covariation with pH
-  ph_diff.lg %~~% beta.np.lg,
-  
-  # Biodiv covariation with nutrients
-  beta.np.lg %~~% beta.all.ani,
-  beta.np.lg %~~% beta.fung,
-  beta.np.lg %~~% beta.bact,
-  beta.np.lg %~~% beta.sper,
-  
-  # Covariation between biotic
-  beta.bact %~~% beta.all.ani,
-  beta.fung %~~% beta.all.ani,
-  beta.fung %~~% beta.bact
-)
-summary(psem_notime)
-# Fisher's C = 390.453 with P-value = 0 and on 8 degrees of freedom
-
-BIC(psem)
-# 458.736
-
-BIC(psem_nobio)
-# 2637.763
-
-BIC(psem_nohabitat)
-# 1046.925
-
-BIC(psem_notime)
-# 814.567
-
-
-####################################
-###  ALTERNATIVE MODELS:
-####################################
-
-# NUTRIENT-LED MODEL: SOIL FEATURES AND PRODUCTIVITY DETERMINE BIODIVERSITY (model A in Fig S4)
-
-
-
-psem_soil_affects_bio=psem(
-  lmer_microclim=lmer(beta.microclim.lg ~ beta.geo.lg + (1|glacier1), data=beta.tot, na.action = na.omit),
-  
-  # env
-  lmer_ph=lmer(ph_diff.lg ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + (1|glacier1), data=beta.tot, na.action = na.omit),
-  lmer_np=lmer(beta.np.lg ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + (1|glacier1), data=beta.tot, na.action = na.omit),
-  
-  lmer_ndvi=lmer(ndvi.diff.lg ~ time_diff.lg + beta.microclim.lg + beta.geo.lg +ph_diff.lg+ (1|glacier1), data=beta.tot, na.action = na.omit),
-  
-  # biodiv
-  lmer_animals=lmer(beta.all.ani ~ beta.sper + ndvi.diff.lg+beta.np.lg+time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=beta.tot, na.action = na.omit),
-  lmer_bact=   lmer(beta.bact ~ ndvi.diff.lg+beta.np.lg+time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=beta.tot, na.action = na.omit),
-  lmer_fung=   lmer(beta.fung ~ ndvi.diff.lg+beta.np.lg+time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=beta.tot, na.action = na.omit),
-  lmer_sper=   lmer(beta.sper ~ ndvi.diff.lg+beta.np.lg+time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=beta.tot, na.action = na.omit),
-  
-  # Covariation env
-  time_diff.lg %~~% beta.geo.lg,
-  time_diff.lg %~~% beta.microclim.lg,
-  
-  # covariation between micro-organisms and plants
-  beta.bact %~~% beta.sper,
-  beta.fung %~~% beta.sper,
-  
-  # covariations with NDVI
-  # ndvi.diff.lg %~~% beta.all.ani,
-  # ndvi.diff.lg %~~% beta.fung,
-  # ndvi.diff.lg %~~% beta.bact,
-  ndvi.diff.lg %~~% beta.np.lg,
-  
-  # Covariation with pH
-  ph_diff.lg %~~% beta.np.lg,
-  
-  # # Biodiv covariation with nutrients
-  # beta.np.lg %~~% beta.all.ani,
-  # beta.np.lg %~~% beta.fung,
-  # beta.np.lg %~~% beta.bact,
-  # beta.np.lg %~~% beta.sper,
-  
-  # Covariation between biotic
-  beta.bact %~~% beta.all.ani,
-  beta.fung %~~% beta.all.ani,
-  beta.fung %~~% beta.bact
-)
-summary(psem_soil_affects_bio)
-BIC(psem_soil_affects_bio)
-# 519.323
-
-# BIODIVERSITY-LED MODEL: BIODIVERSITY AFFECTS SOIL FEATURES AND PRODUCTIVITY. (model B in Fig S4)
-### NOTE THAT IN THIS MODEL WE REMOVED THE POSSIBLE EFFECT OF ANIMALS ON NP AND NDVI BECAUSE OF 1) UNLIKELY EFFECT; 2) THE OBSERVED EFFECT IS NEGATIVE (COUNTERINTUITIVE)
-psem_biodiv_affects_soil=psem(
-  lmer_microclim=lmer(beta.microclim.lg ~ beta.geo.lg + (1|glacier1), data=beta.tot, na.action = na.omit),
-  
-  # env
-  lmer_ph=lmer(ph_diff.lg ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + (1|glacier1), data=beta.tot, na.action = na.omit),
-  lmer_np=lmer(beta.np.lg ~ beta.sper+beta.bact+beta.fung+time_diff.lg + beta.microclim.lg + beta.geo.lg + (1|glacier1), data=beta.tot, na.action = na.omit),
-  
-  # lmer_soil=lmer(beta.soil.sc ~ time_diff.sc + beta.microclim.sc + beta.geo.sc +   (1|glacier1), data=beta.tot, na.action = na.omit),
-  lmer_ndvi=lmer(ndvi.diff.lg ~ beta.sper + beta.bact+beta.fung+time_diff.lg + beta.microclim.lg + beta.geo.lg +ph_diff.lg+ (1|glacier1), data=beta.tot, na.action = na.omit),
-  
-  # biodiv
-  lmer_animals=lmer(beta.all.ani ~ beta.sper + time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=beta.tot, na.action = na.omit),
-  lmer_bact=   lmer(beta.bact ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=beta.tot, na.action = na.omit),
-  lmer_fung=   lmer(beta.fung ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=beta.tot, na.action = na.omit),
-  lmer_sper=   lmer(beta.sper ~ time_diff.lg + beta.microclim.lg + beta.geo.lg + ph_diff.lg+ (1|glacier1), data=beta.tot, na.action = na.omit),
-  
-  # Covariation env
-  time_diff.lg %~~% beta.geo.lg,
-  time_diff.lg %~~% beta.microclim.lg,
-  
-  # covariation between micro-organisms and plants
-  beta.bact %~~% beta.sper,
-  beta.fung %~~% beta.sper,
-  
-  #  covariation with NDVI
-  ndvi.diff.lg %~~% beta.np.lg,
-  
-  # Covariation with pH
-  ph_diff.lg %~~% beta.np.lg,
-  
-  # Covariation between biotic
-  beta.bact %~~% beta.all.ani,
-  beta.fung %~~% beta.all.ani,
-  beta.fung %~~% beta.bact
-)
-
-BIC(psem)
-# 458.736
-
-BIC(psem_biodiv_affects_soil)
-# 517.087
-
-BIC(psem_soil_affects_bio)
-# 519.323
-

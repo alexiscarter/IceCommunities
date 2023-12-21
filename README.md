@@ -9,7 +9,6 @@ The scripts available in the `R` folder are ordered in this way:
 - `2.GLMM.R` for the generalized linear mixed-effect models for the biodiversity and soil features
 - `3.SEM_alpha_diversity.R` for the structural equation modeling for the alpha diversity
 - `4.SEM_beta_diversity.R` for the structural equation modeling for the beta diversity
-- `5.SEM_beta_diversity.R`for the generalized dissimilarity modeling
 
 Files available in the `data` folder:
 - The filtered sequence data from all the markers in compressed format
@@ -18,6 +17,8 @@ Files available in the `data` folder:
 - `IC_sampled_points.csv` Raw field data
 - `labels.csv` Sample names
 - `beta.biotic.plot.csv` Data transformed for beta diversity analyses
+- `terrain_swrad.csv` Data on terrain (solar radiation and aspect)
+- `tables_fig_3.xlsx` Values used to build the figure on relative mportance of biotic relationships, habitat and time for biodiversity development
 
 Raw sequences are deposited at https://doi.org/10.5281/zenodo.6620359
 If you used any of the data, please cite as: Alessia Guerrieri, Aurélie Bonin, Ludovic Gielly, & Gentile Francesco Ficetola. (2022). Raw sequencing data for studying the colonization of soil communities after glacier retreat [Data set]. Zenodo. https://doi.org/10.5281/zenodo.6620359
