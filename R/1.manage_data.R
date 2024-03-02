@@ -44,7 +44,7 @@ fung.motu <- fung.motu %>%
   separate(col = name, into = c("Glacier", "Year", "Spot", "Replicate"), sep = "_", remove = F) %>%
   column_to_rownames(var = "name")
 
-## Sum PCR replicates (relaxed stringency method cf. Mächler et al. 2021 10.1111/mec.15725)
+## Sum PCR replicates
 fung.motu.relax <- fung.motu %>% 
   group_by(Glacier, Year, Spot) %>% # Group by spot (A, B, C, etc.)
   dplyr::summarise(across(where(is.numeric), sum))
@@ -81,7 +81,7 @@ sper.motu <- sper.motu %>%
   separate(col = name, into = c("Glacier", "Year", "Spot", "Replicate"), sep = "_", remove = F) %>%
   column_to_rownames(var = "name")
 
-## Sum PCR replicates (relaxed stringency method cf. Mächler et al. 2021 10.1111/mec.15725)
+## Sum PCR replicates
 sper.motu.relax <- sper.motu %>% 
   group_by(Glacier, Year, Spot) %>% # Group by spot (A, B, C, etc.)
   dplyr::summarise(across(where(is.numeric), sum))
@@ -118,7 +118,7 @@ bact.motu <- bact.motu %>%
   separate(col = name, into = c("Glacier", "Year", "Spot", "Replicate"), sep = "_", remove = F) %>%
   column_to_rownames(var = "name")
 
-## Sum PCR replicates (relaxed stringency method cf. Mächler et al. 2021 10.1111/mec.15725)
+## Sum PCR replicates
 bact.motu.relax <- bact.motu %>% 
   group_by(Glacier, Year, Spot) %>% # Group by spot (A, B, C, etc.)
   dplyr::summarise(across(where(is.numeric), sum))
@@ -155,7 +155,7 @@ coll.motu <- coll.motu %>%
   separate(col = name, into = c("Glacier", "Year", "Spot", "Replicate"), sep = "_", remove = F) %>%
   column_to_rownames(var = "name")
 
-## Sum PCR replicates (relaxed stringency method cf. Mächler et al. 2021 10.1111/mec.15725)
+## Sum PCR replicates
 coll.motu.relax <- coll.motu %>% 
   group_by(Glacier, Year, Spot) %>% # Group by spot (A, B, C, etc.)
   dplyr::summarise(across(where(is.numeric), sum))
@@ -192,7 +192,7 @@ inse.motu <- inse.motu %>%
   separate(col = name, into = c("Glacier", "Year", "Spot", "Replicate"), sep = "_", remove = F) %>%
   column_to_rownames(var = "name")
 
-## Sum PCR replicates (relaxed stringency method cf. Mächler et al. 2021 10.1111/mec.15725)
+## Sum PCR replicates
 inse.motu.relax <- inse.motu %>% 
   group_by(Glacier, Year, Spot) %>% # Group by spot (A, B, C, etc.)
   dplyr::summarise(across(where(is.numeric), sum))
@@ -229,7 +229,7 @@ olig.motu <- olig.motu %>%
   separate(col = name, into = c("Glacier", "Year", "Spot", "Replicate"), sep = "_", remove = F) %>%
   column_to_rownames(var = "name")
 
-## Sum PCR replicates (relaxed stringency method cf. Mächler et al. 2021 10.1111/mec.15725)
+## Sum PCR replicates
 olig.motu.relax <- olig.motu %>% 
   group_by(Glacier, Year, Spot) %>% # Group by spot (A, B, C, etc.)
   dplyr::summarise(across(where(is.numeric), sum))
@@ -266,7 +266,7 @@ euka.motu <- euka.motu %>%
   separate(col = name, into = c("Glacier", "Year", "Spot", "Replicate"), sep = "_", remove = F) %>%
   column_to_rownames(var = "name")
 
-## Sum PCR replicates (relaxed stringency method cf. Mächler et al. 2021 10.1111/mec.15725)
+## Sum PCR replicates
 euka.motu.relax <- euka.motu %>% 
   group_by(Glacier, Year, Spot) %>%
   dplyr::summarise(across(where(is.numeric), sum))
