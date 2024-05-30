@@ -256,31 +256,31 @@ fitMeasures(survey_covary, c("chisq.scaled", "df.scaled", "pvalue.scaled", "rmse
 ### it is thus possible testing the average importance of paths representing the effects of habitat, time and biotic interactions
 
 formlist=list(
-"beta.all.ani~beta.sper+time_diff.lg+beta.microclim.lg+beta.geo.lg+ph_diff.lg",
-"beta.bact~time_diff.lg+beta.microclim.lg+beta.geo.lg+ph_diff.lg",
-"beta.fung~time_diff.lg+beta.microclim.lg+beta.geo.lg+ph_diff.lg",
-"beta.sper~time_diff.lg+beta.microclim.lg+beta.geo.lg+ph_diff.lg",
-"beta.npc.lg~~beta.all.ani",
-"beta.npc.lg~~beta.fung",
-"beta.npc.lg~~beta.bact",
-"beta.npc.lg~~beta.sper",
-"beta.bact~~beta.sper",
-"beta.fung~~beta.sper",
-"beta.bact~~beta.all.ani",
-"beta.fung~~beta.all.ani",
-"beta.fung~~beta.bact",
-"ph_diff.lg~time_diff.lg+beta.geo.lg+beta.microclim.lg",
-"beta.npc.lg~time_diff.lg+beta.microclim.lg+beta.geo.lg",
-"ndvi.diff.lg~time_diff.lg+beta.microclim.lg+beta.geo.lg+ph_diff.lg",
-"beta.microclim.lg~beta.geo.lg",
-"time_diff.lg~~beta.geo.lg",
-"ndvi.diff.lg~~beta.all.ani",
-"ndvi.diff.lg~~beta.fung",
-"ndvi.diff.lg~~beta.bact",
-"ndvi.diff.lg~~beta.npc.lg",
-"ndvi.diff.lg~~beta.sper",
-"ph_diff.lg~~beta.npc.lg",
-"beta.sper~~0*beta.all.ani"
+  "beta.all.ani~beta.sper+time_diff.lg+beta.microclim.lg+beta.geo.lg+ph_diff.lg",
+  "beta.bact~time_diff.lg+beta.microclim.lg+beta.geo.lg+ph_diff.lg",
+  "beta.fung~time_diff.lg+beta.microclim.lg+beta.geo.lg+ph_diff.lg",
+  "beta.sper~time_diff.lg+beta.microclim.lg+beta.geo.lg+ph_diff.lg",
+  "beta.npc.lg~~beta.all.ani",
+  "beta.npc.lg~~beta.fung",
+  "beta.npc.lg~~beta.bact",
+  "beta.npc.lg~~beta.sper",
+  "beta.bact~~beta.sper",
+  "beta.fung~~beta.sper",
+  "beta.bact~~beta.all.ani",
+  "beta.fung~~beta.all.ani",
+  "beta.fung~~beta.bact",
+  "ndvi.diff.lg~~beta.all.ani",
+  "ndvi.diff.lg~~beta.fung",
+  "ndvi.diff.lg~~beta.bact",
+  "ph_diff.lg~time_diff.lg+beta.geo.lg+beta.microclim.lg",
+  "beta.npc.lg~time_diff.lg+beta.microclim.lg+beta.geo.lg",
+  "ndvi.diff.lg~time_diff.lg+beta.microclim.lg+beta.geo.lg+ph_diff.lg",
+  "beta.microclim.lg~beta.geo.lg",
+  "time_diff.lg~~beta.geo.lg",
+  "ndvi.diff.lg~~beta.npc.lg",
+  "ndvi.diff.lg~~beta.sper",
+  "ph_diff.lg~~beta.npc.lg",
+  "beta.sper~~0*beta.all.ani"
 )
   
   
@@ -288,7 +288,7 @@ out=vector("list",0)
 i=1
 
 ## remove iteratively all the paths representing potential effects on biodiversity:
-for(i in 1:13){
+for(i in 1:16){
   print(i)
   split=unlist(strsplit(formlist[[i]],split="\\~{1}"))		# this produces three elements when the formula is a co-variation
   
@@ -338,7 +338,7 @@ res$bic=as.numeric(as.character(res$bic))
 res$delta_bic=res$bic-50158.158     ### calculate the change in BIC resulting from the removal of each variable. 50158.158 is the BIC of the full mdoel
 
 ## for each path, define if it represents biotic effects (b), habitat (h) or time (t)
-type=c("Biot", "Time", "Habitat", " Geog", "Habitat", "Time", "Habitat", " Geog", "Habitat", "Time", "Habitat", " Geog", "Habitat", "Time", "Habitat", " Geog", "Habitat", "Habitat", "Habitat", "Habitat", "Habitat", "Biot", "Biot", "Biot", "Biot", "Biot")
+type=c("Biot", "Time", "Habitat", " Geog", "Habitat", "Time", "Habitat", " Geog", "Habitat", "Time", "Habitat", " Geog", "Habitat", "Time", "Habitat", " Geog", "Habitat", "Habitat", "Habitat", "Habitat", "Habitat", "Biot", "Biot", "Biot", "Biot", "Biot", "Habitat","Habitat","Habitat")
 
 ######################################################
 #  evaluate if the importance of processes is similar between boreal, temperate and tropical
